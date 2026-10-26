@@ -67,12 +67,12 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <SettingField
             label="VK Group ID"
-            value="-123456789"
+            value="-235314099"
             icon={<span className="text-xs font-bold text-blue-500">VK</span>}
           />
           <SettingField
             label="Telegram Chat ID"
-            value="@my_channel"
+            value="@nocnnov"
             icon={<span className="text-xs font-bold text-sky-500">TG</span>}
           />
           <SettingField

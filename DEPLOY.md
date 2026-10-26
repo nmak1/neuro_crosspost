@@ -1,149 +1,46 @@
-# 🚀 Инструкции по деплою
+# Деплой
 
-Проект собран и готов к деплою! Выберите платформу:
+Фронтенд уходит на GitHub Pages через GitHub Actions (`.github/workflows/deploy.yml`).
+Бэкенд крутится локально или на сервере — ему нужен только Python 3.10+ и .env.
 
----
+## Фронтенд (GitHub Pages)
 
-## 1️⃣ Vercel (рекомендуется)
+1. Settings -> Pages -> Source: **GitHub Actions** (без этого workflow падает с HttpError: Not Found)
+2. Пуш в `main` запускает сборку автоматически: typecheck -> build -> deploy
+3. Сайт живёт по адресу вида `https://<user>.github.io/<repo>/`
 
-### Автоматический деплой через GitHub:
-1. Перейдите на [vercel.com](https://vercel.com)
-2. Нажмите "New Project"
-3. Импортируйте репозиторий `nmak1/neuro-crosspost`
-4. Vercel автоматически определит Vite и задеплоит
-
-### Через CLI:
-```bash
-npm install -g vercel
-vercel login
-vercel --prod
-```
-
----
-
-## 2️⃣ Netlify
-
-### Автоматический деплой через GitHub:
-1. Перейдите на [netlify.com](https://netlify.com)
-2. Нажмите "Add new site" → "Import an existing project"
-3. Выберите репозиторий `nmak1/neuro-crosspost`
-4. Build settings уже настроены в `netlify.toml`
-
-### Через CLI:
-```bash
-npm install -g netlify-cli
-netlify login
-netlify deploy --prod --dir=dist
-```
-
----
-
-## 3️⃣ GitHub Pages
-
-### Добавьте в `vite.config.js`:
-```javascript
-export default defineConfig({
-  // ... существующий код
-  base: '/neuro-crosspost/', // имя репозитория
-});
-```
-
-### Задеплойте:
-```bash
-npm install -D gh-pages
-```
-
-Добавьте в `package.json`:
-```json
-{
-  "scripts": {
-    "deploy": "gh-pages -d dist"
-  }
-}
-```
+Локальная проверка перед пушем:
 
 ```bash
+npm ci
+npm run typecheck
 npm run build
-npm run deploy
 ```
 
----
-
-## 4️⃣ Собственный сервер (VPS)
-
-### Через SSH + Nginx:
-```bash
-# На локальной машине
-npm run build
-scp -r dist/* user@your-server.com:/var/www/neuro-crosspost/
-
-# На сервере
-sudo nano /etc/nginx/sites-available/neuro-crosspost
-```
-
-### Nginx конфигурация:
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    root /var/www/neuro-crosspost;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
+## Бэкенд
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/neuro-crosspost /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+python -m venv .venv
+# windows:
+.venv\Scripts\activate
+# linux/mac:
+source .venv/bin/activate
+
+pip install -r requirements.txt
+copy .env.example .env   # windows, на linux cp
+# вписать VK_TOKEN, TG_BOT_TOKEN, YANDEX_API_KEY
+
+python main.py           # планировщик стартует и ждёт своих слотов
 ```
 
----
-
-## 5️⃣ Cloudflare Pages
-
-1. Перейдите на [pages.cloudflare.com](https://pages.cloudflare.com)
-2. "Create a project" → "Connect to Git"
-3. Выберите репозиторий
-4. Build settings:
-   - Framework preset: `Vite`
-   - Build command: `npm run build`
-   - Build output: `dist`
-
----
-
-## ✅ После деплоя
-
-Ваша админ-панель будет доступна по URL, который предоставит платформа.
-
-Для продакшена рекомендуется:
-- Настроить HTTPS (большинство платформ делают это автоматически)
-- Добавить домен (опционально)
-- Настроить переменные окружения для API ключей (если подключите бэкенд)
-
----
-
-## 🔧 Локальный превью
+Полезно держать в фоне на сервере:
 
 ```bash
-npm run dev
+nohup python main.py >> posts.log 2>&1 &
 ```
 
-Откройте [http://localhost:3000](http://localhost:3000)
+## Что где лежит
 
----
-
-## 📦 Структура сборки
-
-```
-dist/
-├── index.html          (3.22 kB)
-├── assets/
-│   ├── index-*.css     (34.05 kB)
-│   └── index-*.js      (321.76 kB)
-```
-
-Общий размер: ~358 kB (gzip: ~105 kB)
+- `data/topics.json` — очередь тем (для club235314099 / @nocnnov)
+- `data/state.json` — какие темы уже использованы, не коммитится
+- `prompts/*.txt` — шаблоны промптов, правятся без перекомпиляции

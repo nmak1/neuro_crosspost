@@ -1,8 +1,9 @@
-# Dependencies
+# окружения и зависимости
+.venv/
+venv/
 node_modules/
-package-lock.json
 
-# Build output
+# артефакты сборки
 dist/
 build/
 
@@ -51,3 +52,6 @@ data/state.json
 *.tmp
 *.temp
 .next/
+
+# архивы для переноса истории, в репо не нужны
+*.bundle
