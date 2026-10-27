@@ -1,0 +1,91 @@
+From bb46f865c8ff9532eab07a6c0034f51e85518646 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Tue, 27 Oct 2026 09:26:04 +0000
+Subject: [PATCH 1/2] Add Python deploy workflow (neuro-crosspost); fix
+ asyncio_run nested-loop crash
+
+---
+ .github/workflows/deploy-python.yml | 43 +++++++++++++++++++++++++++++
+ main.py                             | 12 ++++++--
+ 2 files changed, 53 insertions(+), 2 deletions(-)
+ create mode 100644 .github/workflows/deploy-python.yml
+
+diff --git a/.github/workflows/deploy-python.yml b/.github/workflows/deploy-python.yml
+new file mode 100644
+index 0000000..6c276c1
+--- /dev/null
++++ b/.github/workflows/deploy-python.yml
+@@ -0,0 +1,43 @@
++name: Deploy Neuro Crosspost (Python bot)
++
++# Деплой Python-бота neuro-crosspost на сервер (~/neuro-crosspost, сервис neuro-crosspost).
++# НЕ использует Node.js/npm — это чистый git pull + pip + systemctl restart.
++
++on:
++  push:
++    branches:
++      - main
++  workflow_dispatch: # позволяет запустить деплой вручную из вкладки Actions
++
++permissions:
++  contents: read
++
++concurrency:
++  group: deploy-neuro-crosspost
++  cancel-in-progress: false
++
++jobs:
++  deploy:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Setup SSH key
++        run: |
++          mkdir -p ~/.ssh
++          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
++          chmod 600 ~/.ssh/deploy_key
++          # Добавляем сервер в известные хосты, чтобы SSH не спрашивал подтверждение
++          ssh-keyscan -H 80.78.248.91 >> ~/.ssh/known_hosts
++
++      - name: Deploy to server
++        env:
++          SERVER: ${{ secrets.DEPLOY_SERVER }}
++        run: |
++          set -euo pipefail
++          SERVER="${SERVER:-nmak1@80.78.248.91}"
++          ssh -i ~/.ssh/deploy_key "$SERVER" '
++            cd ~/neuro-crosspost &&
++            git pull origin main &&
++            source venv/bin/activate &&
++            pip install -r requirements.txt &&
++            sudo systemctl restart neuro-crosspost
++          '
+diff --git a/main.py b/main.py
+index de49a6d..9642ba1 100644
+--- a/main.py
++++ b/main.py
+@@ -1,3 +1,4 @@
++import asyncio
+ import json
+ import random
+ from datetime import datetime
+@@ -42,8 +43,15 @@ def run_job():
+ 
+ 
+ def asyncio_run(coro):
+-    import asyncio
+-    return asyncio.run(coro)
++    # asyncio.run() нельзя вызывать из уже работающего event loop —
++    # на всякий случай поддерживаем запуск и в sync, и в async контексте
++    try:
++        loop = asyncio.get_running_loop()
++    except RuntimeError:
++        return asyncio.run(coro)
++    import concurrent.futures
++    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
++        return pool.submit(asyncio.run, coro).result()
+ 
+ 
+ if __name__ == '__main__':
+-- 
+2.39.5
+
