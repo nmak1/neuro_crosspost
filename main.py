@@ -52,8 +52,19 @@ if __name__ == '__main__':
         raise SystemExit(f'не хватает переменных окружения: {", ".join(missing)}. скопируйте .env.example в .env')
 
     sched = BlockingScheduler(timezone='Europe/Moscow')
-    for hm in config.POST_TIMES_UTC:
-        hh, mm = hm.split(':')
-        sched.add_job(run_job, CronTrigger(hour=int(hh), minute=int(mm)))
-    print(f'планировщик взлетел, слоты UTC: {config.POST_TIMES_UTC}')
+
+    day_codes = {'mon': 'mon', 'tue': 'tue', 'wed': 'wed', 'thu': 'thu',
+                 'fri': 'fri', 'sat': 'sat', 'sun': 'sun'}
+    bad = [d for d in config.POST_DAYS if d not in day_codes]
+    if bad:
+        raise SystemExit(f'непонятные дни в POST_DAYS: {", ".join(bad)}. ждём mon,tue,wed,thu,fri,sat,sun')
+
+    hh, mm = config.POST_TIME_MSK.split(':')
+    days_expr = ','.join(day_codes[d] for d in config.POST_DAYS)
+    # один слот на каждый выбранный день — значит ровно 1 пост в день и N штук в неделю
+    for d in config.POST_DAYS:
+        sched.add_job(run_job, CronTrigger(day_of_week=d, hour=int(hh), minute=int(mm),
+                                           timezone='Europe/Moscow'))
+    print(f'планировщик взлетел: {config.POST_TIME_MSK} МСК по дням {days_expr} '
+          f'({len(config.POST_DAYS)} пост/нед, 1 в день)')
     sched.start()

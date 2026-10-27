@@ -62,7 +62,7 @@ export const mockPosts: Post[] = [
     tgStatus: 'success',
     vkContent: '\u27a1\ufe0f Почему к вечеру ' + '"' + 'ноет' + '"' + ' поясница?\n\n\u2022 Днём мышцы держат позвоночник в спазме, к ночи они ' + '"' + 'устают' + '"' + ' и перестают\n\u2022 Сидячая работа \u2192 укорачивается подвздошно-поясничная мышца \u2192 тянет поясницу\n\u2022 Глубокое дыхание выключает боль: диафрагма связана с поясничными фасциями\n\nПопробуйте сегодня: 5 вдохов животом лёжа, колени согнуты.\n\n#остеопат #больвспине #поясница #nocnnov',
     tgContent: '<b>\u27a1\ufe0f Почему к вечеру ноет поясница</b>\n\nМышцы держат позвоночник в спазме весь день, к ночи сдаются. Офис \u2192 укороченная подвздошно-поясничная мышца \u2192 тянет поясницу.\n\n<i>Быстрое упражнение: 5 глубоких вдохов животом лёжа.</i>\n\n#остеопат #nocnnov',
-    createdAt: '2026-01-16T09:00:00Z',
+    createdAt: '2026-01-16T07:00:00Z',
   },
   {
     id: 'p2',
@@ -74,7 +74,7 @@ export const mockPosts: Post[] = [
     tgStatus: 'success',
     vkContent: '\ud83e\uddec Хроническая боль живёт не в спине, а в мозге\n\nСвежие данные нейровизуализации: при боли дольше 3 мес. мозг буквально ' + '"' + 'переучивается' + '"' + ' \u2014 зоны боли расширяются, сигналы защиты идут даже без повреждения тканей.\n\nОтсюда вывод: лечить надо не только тело, но и ' + '"' + 'память боли' + '"' + '. Остеопатия тут \u2014 мягкий способ дать мозгу новый безопасный опыт движения.\n\n#науканауке #мозг #хроническаяболь #остеопатия',
     tgContent: '<b>\ud83e\uddec Боль живёт в мозге, а не в спине</b>\n\nПри хронической боли кортикальные карты ' + '"' + 'переписываются' + '"' + ': сигнал защиты остаётся, даже когда ткань зажила.\n\n<i>Поэтому терапия = тело + переобучение нервной системы.</i>\n\n#nocnnov #наука',
-    createdAt: '2026-01-17T09:00:00Z',
+    createdAt: '2026-01-17T07:00:00Z',
   },
   {
     id: 'p3',
@@ -82,7 +82,7 @@ export const mockPosts: Post[] = [
     topicTitle: 'Мигрень: почему болит половина головы и при чём тут кости черепа',
     vkStatus: 'failed',
     tgStatus: 'failed',
-    createdAt: '2026-01-18T09:00:00Z',
+    createdAt: '2026-01-18T07:00:00Z',
     error: 'LLM API timeout after 3 retries',
   },
 ];
@@ -92,19 +92,19 @@ export const mockSystemStatus: SystemStatus = {
   vkApi: 'online',
   tgApi: 'online',
   scheduler: 'active',
-  lastRun: '2026-01-17T09:00:00Z',
-  nextRun: '2026-01-18T09:00:00Z',
+  lastRun: '2026-01-17T07:00:00Z',
+  nextRun: '2026-01-18T07:00:00Z',
 };
 
 export const mockLogs: LogEntry[] = [
-  { id: 'l1', timestamp: '2026-01-17T09:00:15Z', level: 'success', message: 'Пост опубликован в VK club235314099 (post_id: 235314099_102)', component: 'vk_publisher' },
-  { id: 'l2', timestamp: '2026-01-17T09:00:16Z', level: 'success', message: 'Пост опубликован в TG @nocnnov (message_id: 813)', component: 'tg_publisher' },
-  { id: 'l3', timestamp: '2026-01-17T09:00:16Z', level: 'info', message: 'Тема про нейробиологию хронической боли помечена как использованная', component: 'state_manager' },
-  { id: 'l4', timestamp: '2026-01-17T09:00:10Z', level: 'info', message: 'Генерация текста для VK завершена (1183 символа)', component: 'llm_client' },
-  { id: 'l5', timestamp: '2026-01-17T09:00:08Z', level: 'info', message: 'Генерация текста для TG завершена (598 символов)', component: 'llm_client' },
-  { id: 'l6', timestamp: '2026-01-17T09:00:01Z', level: 'info', message: 'Выбрана тема: "Прорыв в нейробиологии: как мозг формирует хроническую боль"', component: 'topic_selector' },
-  { id: 'l7', timestamp: '2026-01-17T09:00:00Z', level: 'info', message: 'Запущена задача публикации по расписанию', component: 'scheduler' },
-  { id: 'l8', timestamp: '2026-01-18T09:00:30Z', level: 'error', message: 'LLM API timeout после 3 попыток (exponential backoff: 2s, 4s, 8s)', component: 'llm_client' },
-  { id: 'l9', timestamp: '2026-01-18T09:00:31Z', level: 'warning', message: 'Алерт отправлен разработчику в Telegram', component: 'alerter' },
-  { id: 'l10', timestamp: '2026-01-18T09:00:31Z', level: 'error', message: 'Публикация отменена: "Мигрень: почему болит половина головы"', component: 'scheduler' },
+  { id: 'l1', timestamp: '2026-01-17T07:00:15Z', level: 'success', message: 'Пост опубликован в VK club235314099 (post_id: 235314099_102)', component: 'vk_publisher' },
+  { id: 'l2', timestamp: '2026-01-17T07:00:16Z', level: 'success', message: 'Пост опубликован в TG @nocnnov (message_id: 813)', component: 'tg_publisher' },
+  { id: 'l3', timestamp: '2026-01-17T07:00:16Z', level: 'info', message: 'Тема про нейробиологию хронической боли помечена как использованная', component: 'state_manager' },
+  { id: 'l4', timestamp: '2026-01-17T07:00:10Z', level: 'info', message: 'Генерация текста для VK завершена (1183 символа)', component: 'llm_client' },
+  { id: 'l5', timestamp: '2026-01-17T07:00:08Z', level: 'info', message: 'Генерация текста для TG завершена (598 символов)', component: 'llm_client' },
+  { id: 'l6', timestamp: '2026-01-17T07:00:01Z', level: 'info', message: 'Выбрана тема: "Прорыв в нейробиологии: как мозг формирует хроническую боль"', component: 'topic_selector' },
+  { id: 'l7', timestamp: '2026-01-17T07:00:00Z', level: 'info', message: 'Запущена задача публикации по расписанию', component: 'scheduler' },
+  { id: 'l8', timestamp: '2026-01-18T07:00:30Z', level: 'error', message: 'LLM API timeout после 3 попыток (exponential backoff: 2s, 4s, 8s)', component: 'llm_client' },
+  { id: 'l9', timestamp: '2026-01-18T07:00:31Z', level: 'warning', message: 'Алерт отправлен разработчику в Telegram', component: 'alerter' },
+  { id: 'l10', timestamp: '2026-01-18T07:00:31Z', level: 'error', message: 'Публикация отменена: "Мигрень: почему болит половина головы"', component: 'scheduler' },
 ];

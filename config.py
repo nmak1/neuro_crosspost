@@ -12,8 +12,14 @@ LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'yandex_gpt')
 YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '')
 YANDEX_FOLDER_ID = os.getenv('YANDEX_FOLDER_ID', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-POST_TIMES_UTC = [t.strip() for t in os.getenv('POST_TIMES_UTC', '06:00,13:00,20:00').split(',')]
+# расписание постинга. по умолчанию 1 пост в день, 2 дня в неделю (пн и чт)
+# POST_DAYS — дни недели: mon,tue,wed,thu,fri,sat,sun; POST_TIME — когда публикуем
+POST_TIME_MSK = os.getenv('POST_TIME_MSK', '10:00')
+POST_DAYS = [d.strip().lower() for d in os.getenv('POST_DAYS', 'mon,thu').split(',') if d.strip()]
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+
+# для совместимости со старым форматом, если кто ещё держит POST_TIMES_UTC в .env
+LEGACY_POST_TIMES_UTC = [t.strip() for t in os.getenv('POST_TIMES_UTC', '').split(',') if t.strip()]
 
 
 def check_env():
