@@ -1,0 +1,70 @@
+name: Deploy to VPS (reg.ru)
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Upload artifacts to server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVER: ${{ secrets.DEPLOY_SERVER }}
+        run: |
+          set -euo pipefail
+          SERVER="${SERVER:-root@80.78.248.91}"
+          APP_DIR=/opt/autoposter
+
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${SERVER#*@}" >> ~/.ssh/known_hosts 2>/dev/null
+          SSH="ssh -i $HOME/.ssh/id_deploy -o StrictHostKeyChecking=accept-new"
+
+          $SSH "$SERVER" "mkdir -p $APP_DIR"
+
+          # исходники бэкенда/конфига: секреты и артефакты не трогаем на сервере
+          rsync -az --delete -e "$SSH" \
+            --exclude='.git' --exclude='node_modules' --exclude='dist' --exclude='.venv' \
+            --exclude='__pycache__' --exclude='*.log' --exclude='.env' --exclude='data/state.json' \
+            ./ "$SERVER:$APP_DIR/"
+
+          # собранный фронтенд — отдельно, чтобы --delete не снёс бэкенд
+          rsync -az --delete -e "$SSH" dist/ "$SERVER:$APP_DIR/dist/"
+
+          # установка зависимостей, systemd и nginx — скриптом на самом сервере
+          $SSH "$SERVER" 'bash -s' < deploy/remote-setup.sh
+
+      - name: Health check
+        run: |
+          sleep 3
+          curl -fsS http://80.78.248.91/ | grep -qi '<div id="root">'
+          echo "OK: фронтенд отдаётся с сервера"

@@ -1,46 +1,65 @@
-# Деплой
+# Деплой AutoPoster
 
-Фронтенд уходит на GitHub Pages через GitHub Actions (`.github/workflows/deploy.yml`).
-Бэкенд крутится локально или на сервере — ему нужен только Python 3.10+ и .env.
+Два контура:
+1. **GitHub Pages** (`.github/workflows/deploy.yml`) — фронтенд на `<user>.github.io/<repo>` (опционально).
+2. **VPS reg.ru 80.78.248.91** (`.github/workflows/deploy-server.yml`) — основной прод: nginx отдаёт собранный фронтенд, планировщик постинга работает как systemd-сервис `autoposter`.
 
-## Фронтенд (GitHub Pages)
+## Что где лежит на сервере
 
-1. Settings -> Pages -> Source: **GitHub Actions** (без этого workflow падает с HttpError: Not Found)
-2. Пуш в `main` запускает сборку автоматически: typecheck -> build -> deploy
-3. Сайт живёт по адресу вида `https://<user>.github.io/<repo>/`
+- `/opt/autoposter` — код (бэкенд + собранный `dist/`)
+- `/opt/autoposter/.env` — токены и ключи (**не перезаписывается деплоем**, создаётся один раз вручную)
+- `/opt/autoposter/data/state.json` — состояние использованных тем (деплой не трогает)
+- systemd-юнит `autoposter.service`, конфиг nginx `sites-available/autoposter`
+- Логи бэкенда: `journalctl -u autoposter -f`
 
-Локальная проверка перед пушем:
+## Первый запуск (один раз)
 
-```bash
-npm ci
-npm run typecheck
-npm run build
-```
-
-## Бэкенд
+Нужен доступ к серверу по SSH (пароль из панели cloud.reg.ru). С локальной машины:
 
 ```bash
-python -m venv .venv
-# windows:
-.venv\Scripts\activate
-# linux/mac:
-source .venv/bin/activate
+# 1. подготовить сервер + положить деплой-ключ + первый выкат кода
+bash deploy/bootstrap-server.sh root@80.78.248.91
 
-pip install -r requirements.txt
-copy .env.example .env   # windows, на linux cp
-# вписать VK_TOKEN, TG_BOT_TOKEN, YANDEX_API_KEY
-
-python main.py           # планировщик стартует и ждёт своих слотов
+# 2. вписать реальные ключи на сервере
+ssh root@80.78.248.91
+nano /opt/autoposter/.env          # VK_TOKEN, TG_BOT_TOKEN, YANDEX_API_KEY...
+systemctl restart autoposter
 ```
 
-Полезно держать в фоне на сервере:
+Если нет ssh-copy-id/rsync локально — можно всё руками с сервера:
+```bash
+# на сервере от root:
+apt-get update && apt-get install -y nginx rsync python3-venv
+mkdir -p /opt/autoposter && cd /opt/autoposter
+git clone <URL_репозитория> .   # или выложить файлы
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env && nano .env
+cp deploy/autoposter.service /etc/systemd/system/ && systemctl enable --now autoposter
+cp deploy/nginx-site.conf /etc/nginx/sites-available/autoposter
+ln -sf /etc/nginx/sites-available/autoposter /etc/nginx/sites-enabled/autoposter
+rm -f /etc/nginx/sites-enabled/default && nginx -t && systemctl reload nginx
+npm ci && npm run build          # соберёт dist для nginx
+```
+
+## Автоматизация GitHub → сервер (CI/CD)
+
+1. Сгенерирован деплой-ключ: `deploy/deploy_key` (приватный, в git не попадает) и `deploy/deploy_key.pub`.
+2. Публичный ключ добавлен в `~/.ssh/authorized_keys` на сервере (делает `bootstrap-server.sh`).
+3. В GitHub: **Settings → Secrets and variables → Actions → New repository secret**:
+   - `DEPLOY_SSH_KEY` — **полное содержимое файла `deploy/deploy_key`** (включая строки BEGIN/END)
+   - `DEPLOY_SERVER` — `root@80.78.248.91`
+4. Всё. Теперь любой `git push` в `main` запускает workflow **Deploy to VPS (reg.ru)**: typecheck → build → rsync на сервер → установка зависимостей (если менялись) → `systemctl restart autoposter` → health-check.
+
+Ручной выкат без GitHub: `./deploy/deploy.sh` (нужен доступ по SSH с текущей машины).
+
+## Полезные команды на сервере
 
 ```bash
-nohup python main.py >> posts.log 2>&1 &
+systemctl status autoposter        # состояние планировщика
+journalctl -u autoposter -f        # живые логи постинга
+nginx -t && systemctl reload nginx
 ```
 
-## Что где лежит
+## Фронтенд на GitHub Pages (старый контур, опционально)
 
-- `data/topics.json` — очередь тем (для club235314099 / @nocnnov)
-- `data/state.json` — какие темы уже использованы, не коммитится
-- `prompts/*.txt` — шаблоны промптов, правятся без перекомпиляции
+Settings → Pages → Source: **GitHub Actions**. Пуш в main собирает и публикует автоматически.
