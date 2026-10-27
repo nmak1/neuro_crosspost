@@ -1,0 +1,43 @@
+name: Deploy Neuro Crosspost (Python bot)
+
+# Деплой Python-бота neuro-crosspost на сервер (~/neuro-crosspost, сервис neuro-crosspost).
+# НЕ использует Node.js/npm — это чистый git pull + pip + systemctl restart.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # позволяет запустить деплой вручную из вкладки Actions
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-neuro-crosspost
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Добавляем сервер в известные хосты, чтобы SSH не спрашивал подтверждение
+          ssh-keyscan -H 80.78.248.91 >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SERVER: ${{ secrets.DEPLOY_SERVER }}
+        run: |
+          set -euo pipefail
+          SERVER="${SERVER:-nmak1@80.78.248.91}"
+          ssh -i ~/.ssh/deploy_key "$SERVER" '
+            cd ~/neuro-crosspost &&
+            git pull origin main &&
+            source venv/bin/activate &&
+            pip install -r requirements.txt &&
+            sudo systemctl restart neuro-crosspost
+          '

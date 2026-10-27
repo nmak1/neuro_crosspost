@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 from datetime import datetime
@@ -42,8 +43,15 @@ def run_job():
 
 
 def asyncio_run(coro):
-    import asyncio
-    return asyncio.run(coro)
+    # asyncio.run() нельзя вызывать из уже работающего event loop —
+    # на всякий случай поддерживаем запуск и в sync, и в async контексте
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 if __name__ == '__main__':
