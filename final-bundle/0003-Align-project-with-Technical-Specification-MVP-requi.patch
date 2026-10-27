@@ -1,0 +1,284 @@
+From c76d02b57c81eaef55787ff96847cab6796102dd Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Tue, 27 Oct 2026 14:45:43 +0000
+Subject: [PATCH 3/3] =?UTF-8?q?Align=20project=20with=20Technical=20Specif?=
+ =?UTF-8?q?ication=20(=D0=A2=D0=97)=20MVP=20requirements=20-=20Add=20expon?=
+ =?UTF-8?q?ential=20backoff=20retries=20and=20HTML=20fallback=20logic=20to?=
+ =?UTF-8?q?=20Telegram=20publisher=20per=20=D0=A2=D0=97=20section=205=20-?=
+ =?UTF-8?q?=20Implement=20markdown=20cleaning=20regex=20and=20API=20rate?=
+ =?UTF-8?q?=20limiting=20for=20VK=20publisher=20per=20=D0=A2=D0=97=20secti?=
+ =?UTF-8?q?ons=204.2=20and=205=20-=20Configure=20structured=20logging=20wi?=
+ =?UTF-8?q?th=20file=20rotation=20in=20main.py=20as=20specified=20in=20?=
+ =?UTF-8?q?=D0=A2=D0=97=20sections=203=20and=204.4=20-=20Update=20LLM=20pr?=
+ =?UTF-8?q?ompts=20to=20explicitly=20forbid=20markdown,=20hallucinations,?=
+ =?UTF-8?q?=20and=20profanity=20per=20=D0=A2=D0=97=20checklist=20-=20Integ?=
+ =?UTF-8?q?rate=20developer=20alerting=20system=20for=20failed=20posts=20a?=
+ =?UTF-8?q?nd=20exhausted=20topics=20per=20=D0=A2=D0=97=20section=205?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ config.py               |  2 ++
+ core/tg_publisher.py    | 43 +++++++++++++++++++++++++++---
+ core/vk_publisher.py    | 59 ++++++++++++++++++++++++++++++++++++++---
+ main.py                 | 37 ++++++++++++++++++++++----
+ prompts/tg_template.txt |  2 ++
+ prompts/vk_template.txt |  2 ++
+ 6 files changed, 132 insertions(+), 13 deletions(-)
+
+diff --git a/config.py b/config.py
+index 8f5a246..c1bfba4 100644
+--- a/config.py
++++ b/config.py
+@@ -8,6 +8,8 @@ VK_GROUP_ID = os.getenv('VK_GROUP_ID', '235314099')
+ VK_TOKEN = os.getenv('VK_TOKEN', '')
+ TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN', '')
+ TG_CHAT_ID = os.getenv('TG_CHAT_ID', '@nocnnov')
++# чат разработчика для служебных алертов (core/alerter.py); без него алерты уходят только в консоль
++ALERT_TG_CHAT_ID = os.getenv('ALERT_TG_CHAT_ID', '')
+ LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'yandex_gpt')
+ YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '')
+ YANDEX_FOLDER_ID = os.getenv('YANDEX_FOLDER_ID', '')
+diff --git a/core/tg_publisher.py b/core/tg_publisher.py
+index 8150746..8d6ef2a 100644
+--- a/core/tg_publisher.py
++++ b/core/tg_publisher.py
+@@ -1,21 +1,56 @@
+ import asyncio
+ 
+-from aiogram import Bot, Dispatcher
++from aiogram import Bot
++from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
+ from aiogram.types import Message
+ 
+ import config
+ 
++MAX_RETRIES = 3
++BASE_DELAY = 2  # exponential backoff: 2s, 4s, 8s (ТЗ п.5)
++
+ 
+ async def _send(text: str, parse_mode: str = 'HTML') -> int:
+     bot = Bot(token=config.TG_BOT_TOKEN)
++    last_err = None
+     try:
+-        # канал принимает html-разметку, markdown тут режет эмодзи на ровном месте
+-        msg: Message = await bot.send_message(chat_id=config.TG_CHAT_ID, text=text, parse_mode=parse_mode)
+-        return msg.message_id
++        for attempt in range(MAX_RETRIES):
++            try:
++                # канал принимает html-разметку, markdown тут режет эмодзи на ровном месте
++                msg: Message = await bot.send_message(
++                    chat_id=config.TG_CHAT_ID, text=text, parse_mode=parse_mode,
++                    link_preview_options=None,  # disable_web_page_preview=False: ссылку разворачиваем (ТЗ п.4.3)
++                )
++                return msg.message_id
++            except TelegramRetryAfter as e:
++                # 429: Telegram сам говорит, сколько ждать — берём его паузу (ТЗ п.5 лимиты)
++                last_err = e
++                print(f'[tg] flood limit, ждём {e.retry_after}s (попытка {attempt + 1})')
++                await asyncio.sleep(e.retry_after)
++                continue
++            except TelegramAPIError as e:
++                last_err = e
++                status = getattr(e, 'status_code', None) or 0
++                if "can't parse entities" in str(e).lower() and parse_mode == 'HTML':
++                    # LLM сломала HTML — fallback: тот же текст без разметки (ТЗ п.4.3)
++                    print(f'[tg] битый HTML, переотправляем без разметки: {e}')
++                    return await _send_plain_fallback(bot, text)
++                if status >= 500:
++                    delay = BASE_DELAY * (2 ** attempt)
++                    print(f'[tg] попытка {attempt + 1}: ошибка {status}, ждём {delay}s')
++                    await asyncio.sleep(delay)
++                    continue
++                raise
++        raise RuntimeError(f'TG sendMessage не удался после {MAX_RETRIES} попыток') from last_err
+     finally:
+         await bot.session.close()
+ 
+ 
++async def _send_plain_fallback(bot: Bot, text: str) -> int:
++    msg = await bot.send_message(chat_id=config.TG_CHAT_ID, text=text, parse_mode=None)
++    return msg.message_id
++
++
+ def publish_tg(text: str) -> str:
+     loop = asyncio.new_event_loop()
+     try:
+diff --git a/core/vk_publisher.py b/core/vk_publisher.py
+index d3e2989..ef7671a 100644
+--- a/core/vk_publisher.py
++++ b/core/vk_publisher.py
+@@ -1,16 +1,67 @@
++import re
++import time
++
+ import vk_api
+-from vk_api.exceptions import VkApiError
++from vk_api.exceptions import ApiError
+ 
+ import config
+ 
++MAX_RETRIES = 3
++BASE_DELAY = 2  # exponential backoff: 2s, 4s, 8s (ТЗ п.5)
++VK_MIN_INTERVAL = 0.35  # до 3 запросов/сек — держим запас (ТЗ п.5)
++_last_call = [0.0]
++
++# LLM иногда всё-таки отдаёт markdown — VK его не понимает, чистим по ТЗ п.4.2
++_MD_BOLD = re.compile(r'\*\*(.+?)\*\*', re.S)
++_MD_ITAL = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', re.S)
++_MD_STRIKE = re.compile(r'~~(.+?)~~', re.S)
++_MD_CODE = re.compile(r'`{1,3}')
++_MD_LINK = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
++_MD_HEADER = re.compile(r'^(#{1,6})[ \t]+(\S.*)$', re.M)
++
++
++def clean_markdown(text: str) -> str:
++    text = _MD_BOLD.sub(r'\1', text)
++    text = _MD_ITAL.sub(r'\1', text)
++    text = _MD_STRIKE.sub(r'\1', text)
++    text = _MD_LINK.sub(r'\1 (\2)', text)
++    text = _MD_CODE.sub('', text)
++    # markdown-заголовки "## Текст" превращаем в обычный текст;
++    # строки, начинающиеся с хэштега ("#nocnnov"), не трогаем — это валидные хэштеги VK
++    text = _MD_HEADER.sub(lambda m: m.group(2) if not m.group(2).startswith('#') else m.group(0), text)
++    return text.strip()
++
++
+ # стенка группы живёт по id=-group_id, это специфика vk api
+ def _wall_owner() -> int:
+     return -int(config.VK_GROUP_ID)
+ 
+ 
++def _throttle():
++    gap = time.monotonic() - _last_call[0]
++    if gap < VK_MIN_INTERVAL:
++        time.sleep(VK_MIN_INTERVAL - gap)
++    _last_call[0] = time.monotonic()
++
++
+ def publish_vk(text: str) -> str:
+-    """кидаем пост на стену, возвращаем post_id вида 235314099_123"""
++    """кидаем пост на стену с ретраями (5xx/429), возвращаем post_id вида 235314099_123"""
++    text = clean_markdown(text)
+     session = vk_api.VkApi(token=config.VK_TOKEN)
+     vk = session.get_api()
+-    res = vk.wall.post(owner_id=_wall_owner(), from_group=1, message=text)
+-    return f'{config.VK_GROUP_ID}_{res["post_id"]}'
++    last_err = None
++    for attempt in range(MAX_RETRIES):
++        try:
++            _throttle()
++            res = vk.wall.post(owner_id=_wall_owner(), from_group=1, message=text)
++            return f'{config.VK_GROUP_ID}_{res["post_id"]}'
++        except ApiError as e:
++            last_err = e
++            code = getattr(e, 'code', None) or 0
++            if code == 429 or code >= 500:
++                delay = BASE_DELAY * (2 ** attempt)
++                print(f'[vk] попытка {attempt + 1}: ошибка {code}, ждём {delay}s')
++                time.sleep(delay)
++                continue
++            raise  # 15/27 и прочие фатальные — сразу наверх, в алертер
++    raise RuntimeError(f'VK wall.post не удался после {MAX_RETRIES} попыток') from last_err
+diff --git a/main.py b/main.py
+index 9642ba1..645c67e 100644
+--- a/main.py
++++ b/main.py
+@@ -1,5 +1,7 @@
+ import asyncio
+ import json
++import logging
++import logging.handlers
+ import random
+ from datetime import datetime
+ 
+@@ -14,6 +16,26 @@ from core.vk_publisher import publish_vk
+ TOPICS_FILE = 'data/topics.json'
+ 
+ 
++def setup_logging():
++    """консоль + ротация в logs/app.log (ТЗ п.3/п.4.4)"""
++    import os
++    os.makedirs('logs', exist_ok=True)
++    root = logging.getLogger()
++    root.setLevel(getattr(logging, config.LOG_LEVEL.upper(), logging.INFO))
++    fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s')
++    sh = logging.StreamHandler()
++    sh.setFormatter(fmt)
++    fh = logging.handlers.RotatingFileHandler(
++        os.path.join('logs', 'app.log'), maxBytes=1_000_000, backupCount=3, encoding='utf-8')
++    fh.setFormatter(fmt)
++    root.addHandler(sh)
++    root.addHandler(fh)
++    logging.captureWarnings(True)
++
++
++log = logging.getLogger('main')
++
++
+ def pick_topic() -> dict | None:
+     """берём случайную ещё не использованную тему; все закончились — None"""
+     with open(TOPICS_FILE, encoding='utf-8') as f:
+@@ -24,21 +46,25 @@ def pick_topic() -> dict | None:
+ 
+ 
+ def run_job():
+-    print(f"[{datetime.now():%H:%M:%S}] пора постить")
++    log.info('пора постить')
+     topic = pick_topic()
+     if not topic:
+-        print('темы кончились, пополните data/topics.json')
++        # ТЗ п.7: когда темы кончились — не молчим, а алертим
++        msg = 'темы в data/topics.json закончились — пополните базу или сбросьте data/state.json'
++        log.error(msg)
++        alerter.send_alert(msg)
+         return
+     try:
+         texts = asyncio_run(llm_client.generate_post_text(topic['title'], topic['category']))
+         vk_id = publish_vk(texts['vk'])
+         tg_id = publish_tg(texts['tg'])
+         state_manager.mark_used(topic['id'])
+-        print(f'готово: vk={vk_id}, tg={tg_id}, тема: {topic["title"]}')
++        log.info('Успешно опубликовано: VK post_id=%s, TG message_id=%s, тема: %s',
++                 vk_id, tg_id, topic['title'])
+     except Exception as e:
+-        # сюда кидаем всё, что упало — разработчику в личку, детали в консоль
++        # сюда кидаем всё, что упало — разработчику в личку, детали в лог
+         err = str(e)
+-        print(f'публикация не удалась: {err}')
++        log.exception('публикация не удалась: %s', err)
+         alerter.send_alert(f'Сбой на теме "{topic["title"]}": {err}')
+ 
+ 
+@@ -55,6 +81,7 @@ def asyncio_run(coro):
+ 
+ 
+ if __name__ == '__main__':
++    setup_logging()
+     missing = config.check_env()
+     if missing:
+         raise SystemExit(f'не хватает переменных окружения: {", ".join(missing)}. скопируйте .env.example в .env')
+diff --git a/prompts/tg_template.txt b/prompts/tg_template.txt
+index 8d8fe14..ff76019 100644
+--- a/prompts/tg_template.txt
++++ b/prompts/tg_template.txt
+@@ -5,3 +5,5 @@
+ - до 700 знаков
+ - только HTML-теги <b> и <i>, никакого markdown
+ - первый абзац цепляет боль читателя, дальше польза
++- закрывай каждый открытый тег (на <b> обязателен </b>)
++- не выдумывай факты и исследования, не используй мат
+diff --git a/prompts/vk_template.txt b/prompts/vk_template.txt
+index e6c6b13..7af821c 100644
+--- a/prompts/vk_template.txt
++++ b/prompts/vk_template.txt
+@@ -5,3 +5,5 @@
+ - 900-1500 знаков, абзацы пустой строкой
+ - конкретика и практическая польза, без воды и страшилок
+ - в конце 3-5 хэштегов, одно из них #nocnnov
++- не используй markdown (**, *, ~~), только обычный текст с эмодзи
++- не выдумывай факты и исследования, не используй мат
+-- 
+2.39.5
+

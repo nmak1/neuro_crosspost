@@ -1,0 +1,75 @@
+From 6c1b45aba2d5be5b8b7b6b8626e74d7c280244c6 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Tue, 27 Oct 2026 14:38:35 +0000
+Subject: [PATCH 2/3] Fix SSH key handling in deploy workflow to resolve
+ libcrypto errors - Replace echo with printf for reliable multi-line secret
+ writing - Add diagnostic checks using openssl to validate key integrity -
+ Enable verbose SSH logging and IdentitiesOnly flag for better debugging
+
+---
+ ...l-fix-key-writing-printf-add-key-dia.patch | 53 +++++++++++++++++++
+ 1 file changed, 53 insertions(+)
+ create mode 100644 patches/0001-deploy-python.yml-fix-key-writing-printf-add-key-dia.patch
+
+diff --git a/patches/0001-deploy-python.yml-fix-key-writing-printf-add-key-dia.patch b/patches/0001-deploy-python.yml-fix-key-writing-printf-add-key-dia.patch
+new file mode 100644
+index 0000000..02d84fb
+--- /dev/null
++++ b/patches/0001-deploy-python.yml-fix-key-writing-printf-add-key-dia.patch
+@@ -0,0 +1,53 @@
++From 499a16c033878326007c21400d71b850d8409fe1 Mon Sep 17 00:00:00 2001
++From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
++Date: Tue, 27 Oct 2026 14:36:41 +0000
++Subject: [PATCH] deploy-python.yml: fix key writing (printf), add key
++ diagnostics, ssh -v + IdentitiesOnly
++
++---
++ .github/workflows/deploy-python.yml | 19 +++++++++++++++++--
++ 1 file changed, 17 insertions(+), 2 deletions(-)
++
++diff --git a/.github/workflows/deploy-python.yml b/.github/workflows/deploy-python.yml
++index 6c276c1..7d032ef 100644
++--- a/.github/workflows/deploy-python.yml
+++++ b/.github/workflows/deploy-python.yml
++@@ -21,10 +21,25 @@ jobs:
++     runs-on: ubuntu-latest
++     steps:
++       - name: Setup SSH key
+++        env:
+++          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
++         run: |
+++          set -euo pipefail
++           mkdir -p ~/.ssh
++-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+++          # printf сохраняет переводы строк как есть (echo мог их испортить)
+++          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
++           chmod 600 ~/.ssh/deploy_key
+++
+++          echo "::group::Key diagnostics"
+++          head -n 1 ~/.ssh/deploy_key
+++          wc -l < ~/.ssh/deploy_key | xargs echo "Lines in key file:"
+++          if command -v openssl >/dev/null 2>&1; then
+++            openssl pkey -in ~/.ssh/deploy_key -noout \
+++              && echo "openssl: key loads OK" \
+++              || echo "openssl: FAILED to load key -> secret is corrupt or wrong key type"
+++          fi
+++          echo "::endgroup::"
+++
++           # Добавляем сервер в известные хосты, чтобы SSH не спрашивал подтверждение
++           ssh-keyscan -H 80.78.248.91 >> ~/.ssh/known_hosts
++ 
++@@ -34,7 +49,7 @@ jobs:
++         run: |
++           set -euo pipefail
++           SERVER="${SERVER:-nmak1@80.78.248.91}"
++-          ssh -i ~/.ssh/deploy_key "$SERVER" '
+++          ssh -v -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
++             cd ~/neuro-crosspost &&
++             git pull origin main &&
++             source venv/bin/activate &&
++-- 
++2.39.5
++
+-- 
+2.39.5
+

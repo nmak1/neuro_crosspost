@@ -1,7 +1,7 @@
 From 499a16c033878326007c21400d71b850d8409fe1 Mon Sep 17 00:00:00 2001
 From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
 Date: Tue, 27 Oct 2026 14:36:41 +0000
-Subject: [PATCH] deploy-python.yml: fix key writing (printf), add key
+Subject: [PATCH 1/3] deploy-python.yml: fix key writing (printf), add key
  diagnostics, ssh -v + IdentitiesOnly
 
 ---
