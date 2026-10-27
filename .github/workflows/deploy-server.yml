@@ -66,5 +66,5 @@ jobs:
       - name: Health check
         run: |
           sleep 3
-          curl -fsS http://80.78.248.91/ | grep -qi '<div id="root">'
-          echo "OK: фронтенд отдаётся с сервера"
+          curl -fsS http://80.78.248.91:8080/ | grep -qi 'AutoPoster\|<div id="root">'
+          echo "OK: фронтенд отдаётся с сервера на :8080"

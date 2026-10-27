@@ -18,7 +18,7 @@ fi
 cp /tmp/autoposter.service /etc/systemd/system/autoposter.service
 cp /tmp/nginx-site.conf /etc/nginx/sites-available/autoposter
 ln -sf /etc/nginx/sites-available/autoposter /etc/nginx/sites-enabled/autoposter
-rm -f /etc/nginx/sites-enabled/default
+# НЕ удаляем default: на 80-м порту живёт другое приложение (My Cloud), наш сайт на 8080
 nginx -t && systemctl reload nginx
 
 systemctl daemon-reload

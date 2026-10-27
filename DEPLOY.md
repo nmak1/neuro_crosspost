@@ -4,6 +4,8 @@
 1. **GitHub Pages** (`.github/workflows/deploy.yml`) — фронтенд на `<user>.github.io/<repo>` (опционально).
 2. **VPS reg.ru 80.78.248.91** (`.github/workflows/deploy-server.yml`) — основной прод: nginx отдаёт собранный фронтенд, планировщик постинга работает как systemd-сервис `autoposter`.
 
+ПОРТЫ: порт 80 на сервере уже занят другим приложением («My Cloud»), поэтому фронтенд AutoPoster отдаётся nginx'ом на **порту 8080** → http://80.78.248.91:8080/
+
 ## Что где лежит на сервере
 
 - `/opt/autoposter` — код (бэкенд + собранный `dist/`)

@@ -31,4 +31,4 @@ rsync -az deploy/autoposter.service deploy/nginx-site.conf "$SERVER:/tmp/"
 echo "==> 4. Настройка сервера (venv, systemd, nginx)"
 ssh "$SERVER" 'bash -s' < deploy/remote-setup.sh
 
-echo "==> Готово. Фронтенд: http://80.78.248.91/  Бэкенд: systemctl status autoposter (на сервере)"
+echo "==> Готово. Фронтенд: http://80.78.248.91:8080/  Бэкенд: systemctl status autoposter (на сервере)"
