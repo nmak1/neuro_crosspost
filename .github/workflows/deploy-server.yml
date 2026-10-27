@@ -40,7 +40,7 @@ jobs:
           SERVER: ${{ secrets.DEPLOY_SERVER }}
         run: |
           set -euo pipefail
-          SERVER="${SERVER:-root@80.78.248.91}"
+          SERVER="${SERVER:-nmak1@80.78.248.91}"
           APP_DIR=/opt/autoposter
 
           mkdir -p ~/.ssh
