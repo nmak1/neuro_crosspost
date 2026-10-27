@@ -18,6 +18,39 @@
 
 Нужен доступ к серверу по SSH (пароль из панели cloud.reg.ru). С локальной машины:
 
+### Windows (PowerShell) — важно!
+
+В PowerShell **нельзя** писать `bash deploy/bootstrap-server.sh ...` — bash там нет (ошибка WSL `execvpe(/bin/bash)`).
+Для Windows есть готовый скрипт **`deploy/bootstrap-server.ps1`** (использует встроенные в Windows `ssh`/`scp`, bash на локальной машине не нужен):
+
+```powershell
+cd D:\Project\neuro_crosspost
+
+# если на сервер заходите как root:
+.\deploy\bootstrap-server.ps1 -Server root@80.78.248.91
+
+# если как обычный пользователь с sudo:
+.\deploy\bootstrap-server.ps1 -Server nmak1@80.78.248.91 -Sudo
+```
+
+Скрипт: проверит доступ по SSH, положит публичный деплой-ключ в `authorized_keys`, установит пакеты (git, rsync, nginx, python3, ufw) и откроет порты. Дальше — шаги, которые он выведет в конце.
+
+Если ExecutionPolicy запрещает запуск .ps1, выполните один раз:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Можно и совсем без скрипта, вручную (то же самое, что делает bootstrap-server.ps1):
+```powershell
+scp deploy\deploy_key.pub nmak1@80.78.248.91:/tmp/deploy_key.pub
+ssh nmak1@80.78.248.91 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat /tmp/deploy_key.pub >> ~/.ssh/authorized_keys && sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && rm /tmp/deploy_key.pub"
+ssh nmak1@80.78.248.91 "sudo apt-get update && sudo apt-get install -y git rsync nginx python3 python3-venv python3-pip ufw && sudo mkdir -p /opt/autoposter/data && sudo ufw allow 22,80,443,8080/tcp && sudo ufw --force enable"
+```
+
+Деплой кода с Windows — проще всего через GitHub Actions (секреты ниже), либо запустив `deploy/deploy.sh` из Git Bash.
+
+### Linux / macOS
+
 ```bash
 # 1. подготовить сервер + положить деплой-ключ + первый выкат кода
 bash deploy/bootstrap-server.sh root@80.78.248.91
