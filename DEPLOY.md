@@ -22,7 +22,8 @@
 # 1. подготовить сервер + положить деплой-ключ + первый выкат кода
 bash deploy/bootstrap-server.sh root@80.78.248.91
 
-# 2. вписать реальные ключи на сервере
+# 2. в cloud.reg.ru → Сетевые правила (firewall) добавьте порт 8080 TCP
+# 3. вписать реальные ключи на сервере
 ssh root@80.78.248.91
 nano /opt/autoposter/.env          # VK_TOKEN, TG_BOT_TOKEN, YANDEX_API_KEY...
 systemctl restart autoposter

@@ -21,7 +21,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git rsync nginx python3 python3-venv python3-pip ufw
 mkdir -p /opt/autoposter/data
-ufw allow 22,80,443/tcp >/dev/null 2>&1 || true
+ufw allow 22,80,443,8080/tcp >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
 echo "Сервер подготовлен"
 REMOTE
