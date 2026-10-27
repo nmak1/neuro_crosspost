@@ -1,0 +1,29 @@
+From d93d245a48e82475ce915e54a974891d33eb9780 Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Tue, 27 Oct 2026 09:29:30 +0000
+Subject: [PATCH 2/2] config: define ALERT_TG_CHAT_ID so core/alerter.py can
+ actually send alerts
+
+alerter read config.ALERT_TG_CHAT_ID via __dict__ but the variable was never
+defined in config.py (only mentioned in .env.example), so alerts always fell
+back to console. Now loaded from env with empty default.
+---
+ config.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/config.py b/config.py
+index 8f5a246..c1bfba4 100644
+--- a/config.py
++++ b/config.py
+@@ -8,6 +8,8 @@ VK_GROUP_ID = os.getenv('VK_GROUP_ID', '235314099')
+ VK_TOKEN = os.getenv('VK_TOKEN', '')
+ TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN', '')
+ TG_CHAT_ID = os.getenv('TG_CHAT_ID', '@nocnnov')
++# чат разработчика для служебных алертов (core/alerter.py); без него алерты уходят только в консоль
++ALERT_TG_CHAT_ID = os.getenv('ALERT_TG_CHAT_ID', '')
+ LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'yandex_gpt')
+ YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '')
+ YANDEX_FOLDER_ID = os.getenv('YANDEX_FOLDER_ID', '')
+-- 
+2.39.5
+
