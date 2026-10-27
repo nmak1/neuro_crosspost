@@ -8,6 +8,8 @@ VK_GROUP_ID = os.getenv('VK_GROUP_ID', '235314099')
 VK_TOKEN = os.getenv('VK_TOKEN', '')
 TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN', '')
 TG_CHAT_ID = os.getenv('TG_CHAT_ID', '@nocnnov')
+# чат разработчика для служебных алертов (core/alerter.py); без него алерты уходят только в консоль
+ALERT_TG_CHAT_ID = os.getenv('ALERT_TG_CHAT_ID', '')
 LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'yandex_gpt')
 YANDEX_API_KEY = os.getenv('YANDEX_API_KEY', '')
 YANDEX_FOLDER_ID = os.getenv('YANDEX_FOLDER_ID', '')
