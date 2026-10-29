@@ -1,6 +1,6 @@
 name: Deploy Neuro Crosspost (Python bot)
 
-# Деплой Python-бота neuro-crosspost на сервер (~/neuro-crosspost, сервис neuro-crosspost).
+# Деплой Python-бота neuro_crosspost на сервер (~/neuro_crosspost, сервис neuro_crosspost).
 # НЕ использует Node.js/npm — это чистый git pull + pip + systemctl restart.
 
 on:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-neuro-crosspost
+  group: deploy-neuro_crosspost
   cancel-in-progress: false
 
 jobs:
@@ -25,23 +25,28 @@ jobs:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
-          mkdir -p ~/.ssh
+          # Ключ кладём НЕ в ~/.ssh: в Actions переменная HOME иногда указывает
+          # на недоступный для записи путь — mkdir ~/.ssh падал с
+          # "Permission denied". Рабочая директория джоба (/home/runner/work/...)
+          # доступна на запись всегда.
+          WORKDIR="$(pwd)"
+          mkdir -p "$WORKDIR/.ssh"
           # printf сохраняет переводы строк как есть (echo мог их испортить)
-          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KEY" > "$WORKDIR/.ssh/deploy_key"
+          chmod 600 "$WORKDIR/.ssh/deploy_key"
 
           echo "::group::Key diagnostics"
-          head -n 1 ~/.ssh/deploy_key
-          wc -l < ~/.ssh/deploy_key | xargs echo "Lines in key file:"
+          head -n 1 "$WORKDIR/.ssh/deploy_key"
+          wc -l < "$WORKDIR/.ssh/deploy_key" | xargs echo "Lines in key file:"
           if command -v openssl >/dev/null 2>&1; then
-            openssl pkey -in ~/.ssh/deploy_key -noout \
+            openssl pkey -in "$WORKDIR/.ssh/deploy_key" -noout \
               && echo "openssl: key loads OK" \
               || echo "openssl: FAILED to load key -> secret is corrupt or wrong key type"
           fi
           echo "::endgroup::"
 
           # Добавляем сервер в известные хосты, чтобы SSH не спрашивал подтверждение
-          ssh-keyscan -H 80.78.248.91 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 80.78.248.91 >> "$WORKDIR/.ssh/known_hosts"
 
       - name: Deploy to server
         env:
@@ -49,10 +54,12 @@ jobs:
         run: |
           set -euo pipefail
           SERVER="${SERVER:-nmak1@80.78.248.91}"
-          ssh -v -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER" '
-            cd ~/neuro-crosspost &&
+          WORKDIR="$(pwd)"
+          ssh -v -i "$WORKDIR/.ssh/deploy_key" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$WORKDIR/.ssh/known_hosts" "$SERVER" '
+            cd ~/neuro_crosspost &&
             git pull origin main &&
             source venv/bin/activate &&
             pip install -r requirements.txt &&
-            sudo systemctl restart neuro-crosspost
+            sudo systemctl restart neuro_crosspost
           '

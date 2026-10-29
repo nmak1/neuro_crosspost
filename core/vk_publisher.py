@@ -13,7 +13,7 @@ _last_call = [0.0]
 
 # LLM иногда всё-таки отдаёт markdown — VK его не понимает, чистим по ТЗ п.4.2
 _MD_BOLD = re.compile(r'\*\*(.+?)\*\*', re.S)
-_MD_ITAL = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', re.S)
+_MD_ITAL = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\\*)', re.S)
 _MD_STRIKE = re.compile(r'~~(.+?)~~', re.S)
 _MD_CODE = re.compile(r'`{1,3}')
 _MD_LINK = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
@@ -32,9 +32,14 @@ def clean_markdown(text: str) -> str:
     return text.strip()
 
 
-# стенка группы живёт по id=-group_id, это специфика vk api
+# стенка группы живёт по отрицательному id (специфика VK API).
+# ВАЖНО: в .env VK_GROUP_ID может быть записан уже со знаком минус
+# (VK_GROUP_ID=-235314099) — тогда прежний "-int(...)" превращал его в
+# положительное число и пост уходил на стену пользователя. Нормализуем:
+# owner_id ВСЕГДА отрицательный, независимо от знака в .env.
 def _wall_owner() -> int:
-    return -int(config.VK_GROUP_ID)
+    gid = abs(int(str(config.VK_GROUP_ID).strip()))
+    return -gid
 
 
 def _throttle():
@@ -44,17 +49,36 @@ def _throttle():
     _last_call[0] = time.monotonic()
 
 
+def _post_once(vk, text: str) -> str:
+    """одна попытка wall.post; понятная подсказка при ошибке 214
+    (сервисный ключ группы не умеет публиковать — ТЗ п.4.2/п.7)"""
+    _throttle()
+    owner = _wall_owner()
+    try:
+        res = vk.wall.post(owner_id=owner, from_group=1, message=text)
+        # post_id в логе вида -235314099_9 (id стенки всегда отрицательный)
+        return f'{owner}_{res["post_id"]}'
+    except ApiError as e:
+        if getattr(e, 'code', None) == 214:
+            raise RuntimeError(
+                'VK ошибка 214: сервисный ключ группы запрещает wall.post. '
+                'Исправление: VK ID → Разработка приложений → ваше приложение → Настройки → '
+                '"Ключ доступа" выбрать тип "Пользовательский" (права: wall, photos, offline), '
+                'получить его и заменить VK_TOKEN в ~/neuro_crosspost/.env на сервере, '
+                'затем: sudo systemctl restart neuro_crosspost'
+            ) from e
+        raise
+
+
 def publish_vk(text: str) -> str:
-    """кидаем пост на стену с ретраями (5xx/429), возвращаем post_id вида 235314099_123"""
+    """кидаем пост на стену с ретраями (5xx/429), возвращаем post_id вида -235314099_123"""
     text = clean_markdown(text)
     session = vk_api.VkApi(token=config.VK_TOKEN)
     vk = session.get_api()
     last_err = None
     for attempt in range(MAX_RETRIES):
         try:
-            _throttle()
-            res = vk.wall.post(owner_id=_wall_owner(), from_group=1, message=text)
-            return f'{config.VK_GROUP_ID}_{res["post_id"]}'
+            return _post_once(vk, text)
         except ApiError as e:
             last_err = e
             code = getattr(e, 'code', None) or 0
@@ -63,5 +87,5 @@ def publish_vk(text: str) -> str:
                 print(f'[vk] попытка {attempt + 1}: ошибка {code}, ждём {delay}s')
                 time.sleep(delay)
                 continue
-            raise  # 15/27 и прочие фатальные — сразу наверх, в алертер
-    raise RuntimeError(f'VK wall.post не удался после {MAX_RETRIES} попыток') from last_err
+            raise  # 15/27/214 и прочие фатальные — сразу наверх, в алертер
+    raise RuntimeError(f'VK wall.post не удался после {MAX_RETRIES} попыт
