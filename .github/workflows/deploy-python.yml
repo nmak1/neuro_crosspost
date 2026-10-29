@@ -25,28 +25,37 @@ jobs:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
           set -euo pipefail
-          # Ключ кладём НЕ в ~/.ssh: в Actions переменная HOME иногда указывает
-          # на недоступный для записи путь — mkdir ~/.ssh падал с
-          # "Permission denied". Рабочая директория джоба (/home/runner/work/...)
-          # доступна на запись всегда.
-          WORKDIR="$(pwd)"
-          mkdir -p "$WORKDIR/.ssh"
+          if [ -z "${KEY:-}" ]; then
+            echo "::error::Секрет DEPLOY_SSH_KEY пуст или отсутствует — деплой невозможен."
+            echo "Добавьте его: Settings -> Secrets and variables -> Actions"
+            exit 1
+          fi
+          # Кладём ключ в $RUNNER_TEMP, а НЕ в ~/.ssh и не в рабочую директорию:
+          #   - HOME в Actions иногда указывает на недоступный для записи путь;
+          #   - после actions/checkout рабочая директория джоба может принадлежать
+          #     root — mkdir в ней падал с "mkdir: Permission denied".
+          # $RUNNER_TEMP всегда принадлежит пользователю runner'а и доступен на запись.
+          KEYDIR="${RUNNER_TEMP:-$(mktemp -d)}/deploy-ssh"
+          mkdir -p "$KEYDIR"
+          chmod 700 "$KEYDIR"
           # printf сохраняет переводы строк как есть (echo мог их испортить)
-          printf '%s\n' "$KEY" > "$WORKDIR/.ssh/deploy_key"
-          chmod 600 "$WORKDIR/.ssh/deploy_key"
+          printf '%s\n' "$KEY" > "$KEYDIR/deploy_key"
+          chmod 600 "$KEYDIR/deploy_key"
+          # пробрасываем путь дальше — один и тот же каталог во всех шагах джоба
+          echo "KEYDIR=$KEYDIR" >> "$GITHUB_ENV"
 
           echo "::group::Key diagnostics"
-          head -n 1 "$WORKDIR/.ssh/deploy_key"
-          wc -l < "$WORKDIR/.ssh/deploy_key" | xargs echo "Lines in key file:"
+          head -n 1 "$KEYDIR/deploy_key"
+          wc -l < "$KEYDIR/deploy_key" | xargs echo "Lines in key file:"
           if command -v openssl >/dev/null 2>&1; then
-            openssl pkey -in "$WORKDIR/.ssh/deploy_key" -noout \
+            openssl pkey -in "$KEYDIR/deploy_key" -noout \
               && echo "openssl: key loads OK" \
               || echo "openssl: FAILED to load key -> secret is corrupt or wrong key type"
           fi
           echo "::endgroup::"
 
           # Добавляем сервер в известные хосты, чтобы SSH не спрашивал подтверждение
-          ssh-keyscan -H 80.78.248.91 >> "$WORKDIR/.ssh/known_hosts"
+          ssh-keyscan -H 80.78.248.91 >> "$KEYDIR/known_hosts"
 
       - name: Deploy to server
         env:
@@ -54,9 +63,8 @@ jobs:
         run: |
           set -euo pipefail
           SERVER="${SERVER:-nmak1@80.78.248.91}"
-          WORKDIR="$(pwd)"
-          ssh -v -i "$WORKDIR/.ssh/deploy_key" -o IdentitiesOnly=yes \
-            -o UserKnownHostsFile="$WORKDIR/.ssh/known_hosts" "$SERVER" '
+          ssh -v -i "$KEYDIR/deploy_key" -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$KEYDIR/known_hosts" "$SERVER" '
             cd ~/neuro_crosspost &&
             git pull origin main &&
             source venv/bin/activate &&
