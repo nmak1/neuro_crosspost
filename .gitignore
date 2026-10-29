@@ -58,3 +58,6 @@ data/state.json
 
 # деплой-ключи (не коммитить приватную часть)
 deploy/deploy_key
+
+OPERATIONS.md
+
