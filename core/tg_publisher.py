@@ -1,4 +1,5 @@
 import asyncio
+import re  # НОВОЕ: для очистки markdown-обёрток от LLM
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
@@ -9,21 +10,39 @@ import config
 MAX_RETRIES = 3
 BASE_DELAY = 2  # exponential backoff: 2s, 4s, 8s (ТЗ п.5)
 
+# НОВОЕ: очистка Markdown и ```-обёрток, которые LLM иногда добавляет к HTML-ответу
+_MD_BOLD = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
+_MD_ITALIC = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', re.DOTALL)
+
+
+def _clean_markdown(text: str) -> str:
+    """LLM не умеет стабильно отдавать чистый HTML: убираем md-разметку и код-фенсы."""
+    t = text.strip()
+    if t.startswith('```'):  # срезать обёртку ```html ... ```
+        first_nl = t.find('\n')
+        if first_nl != -1:
+            t = t[first_nl + 1:]
+        if t.rstrip().endswith('```'):
+            t = t.rstrip()[:-3]
+        t = t.strip()
+    t = _MD_BOLD.sub(r'<b>\1</b>', t)
+    t = _MD_ITALIC.sub(r'<i>\1</i>', t)
+    return t.replace('~~', '').replace('`', '')
+
 
 async def _send(text: str, parse_mode: str = 'HTML') -> int:
+    text = _clean_markdown(text)  # НОВОЕ: чистим ДО отправки
     bot = Bot(token=config.TG_BOT_TOKEN)
     last_err = None
     try:
         for attempt in range(MAX_RETRIES):
             try:
-                # канал принимает html-разметку, markdown тут режет эмодзи на ровном месте
                 msg: Message = await bot.send_message(
                     chat_id=config.TG_CHAT_ID, text=text, parse_mode=parse_mode,
-                    link_preview_options=None,  # disable_web_page_preview=False: ссылку разворачиваем (ТЗ п.4.3)
+                    link_preview_options=None,
                 )
                 return msg.message_id
             except TelegramRetryAfter as e:
-                # 429: Telegram сам говорит, сколько ждать — берём его паузу (ТЗ п.5 лимиты)
                 last_err = e
                 print(f'[tg] flood limit, ждём {e.retry_after}s (попытка {attempt + 1})')
                 await asyncio.sleep(e.retry_after)
@@ -32,10 +51,9 @@ async def _send(text: str, parse_mode: str = 'HTML') -> int:
                 last_err = e
                 status = getattr(e, 'status_code', None) or 0
                 if "can't parse entities" in str(e).lower() and parse_mode == 'HTML':
-                    # LLM сломала HTML — fallback: тот же текст без разметки (ТЗ п.4.3)
                     print(f'[tg] битый HTML, переотправляем без разметки: {e}')
                     return await _send_plain_fallback(bot, text)
-                if status >= 500:
+                if status >= 500 or status == 429:
                     delay = BASE_DELAY * (2 ** attempt)
                     print(f'[tg] попытка {attempt + 1}: ошибка {status}, ждём {delay}s')
                     await asyncio.sleep(delay)
