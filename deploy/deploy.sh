@@ -21,12 +21,12 @@ tar --exclude=.git --exclude=node_modules --exclude=dist --exclude=.venv \
     --exclude=__pycache__ --exclude='*.log' --exclude=.env -cf - . | tar -xf - -C "$STAGE/app"
 cp -r dist "$STAGE/app/dist"
 
-echo "==> 3. Копия файлов на сервер без удаления бэкенда (.env, state.json не трогаем)"
-ssh -o StrictHostKeyChecking=accept-new "$SERVER" "mkdir -p $APP_DIR"
+echo "==> 3. Копия файлов на сервер без удаления бэкенда (.env, data/ не трогаем)"
+ssh -o StrictHostKeyChecking=accept-new "$SERVER" "mkdir -p $APP_DIR $APP_DIR/data"
 rsync -az --delete \
-  --exclude='.env' --exclude='data/state.json' --exclude='.venv/' \
+  --exclude='.env' --exclude='data/' --exclude='.venv/' \
   "$STAGE/app/" "$SERVER:$APP_DIR/"
-rsync -az deploy/autoposter.service deploy/nginx-site.conf "$SERVER:/tmp/"
+scp deploy/autoposter.service deploy/nginx-site.conf "$SERVER:/tmp/"
 
 echo "==> 4. Настройка сервера (venv, systemd, nginx)"
 ssh "$SERVER" 'bash -s' < deploy/remote-setup.sh

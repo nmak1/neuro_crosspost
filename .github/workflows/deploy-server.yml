@@ -34,6 +34,22 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Check deployment secrets
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SERVER: ${{ secrets.DEPLOY_SERVER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::Секрет DEPLOY_SSH_KEY пуст или отсутствует."
+            echo "Добавьте его: Settings -> Secrets and variables -> Actions -> New repository secret"
+            echo "  DEPLOY_SSH_KEY = полное содержимое deploy/deploy_key (включая BEGIN/END)"
+            echo "  DEPLOY_SERVER  = nmak1@80.78.248.91 (или root@80.78.248.91)"
+            exit 1
+          fi
+          echo "DEPLOY_SSH_KEY задан ($(printf '%s' "$SSH_PRIVATE_KEY" | wc -l) строк)."
+          echo "DEPLOY_SERVER=${SERVER:-<не задан, будет использовано значение по умолчанию nmak1@80.78.248.91>}"
+
       - name: Upload artifacts to server
         env:
           SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -43,29 +59,47 @@ jobs:
           SERVER="${SERVER:-nmak1@80.78.248.91}"
           APP_DIR=/opt/autoposter
 
-          # Кладём ключ в рабочую директорию джоба, а НЕ в ~/.ssh:
-          # переменная HOME в Actions иногда указывает на недоступный для
-          # записи путь — mkdir падал с "Permission denied" (сбой шага
-          # "Upload artifacts to server").
-          WORKDIR="$(pwd)"
-          mkdir -p "$WORKDIR/.ssh"
-          printf '%s\n' "$SSH_PRIVATE_KEY" > "$WORKDIR/.ssh/id_deploy"
-          chmod 600 "$WORKDIR/.ssh/id_deploy"
-          ssh-keyscan -H "${SERVER#*@}" >> "$WORKDIR/.ssh/known_hosts" 2>/dev/null
-          SSH="ssh -i $WORKDIR/.ssh/id_deploy -o IdentitiesOnly=yes -o UserKnownHostsFile=$WORKDIR/.ssh/known_hosts -o StrictHostKeyChecking=accept-new"
+          # Каталог для ключа создаём в $RUNNER_TEMP, а НЕ в ~/.ssh и не в $(pwd):
+          #   - HOME в Actions иногда указывает на недоступный для записи путь;
+          #   - после actions/checkout рабочая директория джоба принадлежит root
+          #     (checkout временно подменяет HOME и пишет через git), и обычный
+          #     mkdir внутри неё падал с "mkdir: Permission denied".
+          # $RUNNER_TEMP всегда принадлежит пользователю runner'а и доступен на запись.
+          KEYDIR="${RUNNER_TEMP:-$(mktemp -d)}/deploy-ssh"
+          mkdir -p "$KEYDIR"
+          chmod 700 "$KEYDIR"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEYDIR/id_deploy"
+          chmod 600 "$KEYDIR/id_deploy"
+          ssh-keyscan -H "${SERVER#*@}" >> "$KEYDIR/known_hosts" 2>/dev/null || true
+          SSH="ssh -i $KEYDIR/id_deploy -o IdentitiesOnly=yes -o UserKnownHostsFile=$KEYDIR/known_hosts -o StrictHostKeyChecking=accept-new"
 
           $SSH "$SERVER" "mkdir -p $APP_DIR"
 
           # исходники бэкенда/конфига: секреты и артефакты не трогаем на сервере
           rsync -az --delete -e "$SSH" \
             --exclude='.git' --exclude='node_modules' --exclude='dist' --exclude='.venv' \
-            --exclude='__pycache__' --exclude='*.log' --exclude='.env' --exclude='data/state.json' \
+            --exclude='__pycache__' --exclude='*.log' --exclude='.env' --exclude='data/' \
             ./ "$SERVER:$APP_DIR/"
 
           # собранный фронтенд — отдельно, чтобы --delete не снёс бэкенд
           rsync -az --delete -e "$SSH" dist/ "$SERVER:$APP_DIR/dist/"
 
+          # data/ исключён из rsync целиком (см. выше): если на сервере ещё нет
+          # каталога data (или он принадлежит root от старого деплоя), создаём его
+          # от имени текущего пользователя — иначе планировщик упадёт при записи state.json
+          $SSH "$SERVER" "mkdir -p $APP_DIR/data && ls -ld $APP_DIR/data"
+
+          # config.py кладём на сервер принудительно (rsync выше уже переносит его
+          # из рабочей копии — этот шаг гарантирует актуальность даже при сбоях
+          # фильтрации): без него бэкенд падает при импорте на старте сервиса
+          scp -i "$KEYDIR/id_deploy" -o IdentitiesOnly=yes -o UserKnownHostsFile="$KEYDIR/known_hosts" \
+            -o StrictHostKeyChecking=accept-new config.py "$SERVER:$APP_DIR/config.py"
+
           # установка зависимостей, systemd и nginx — скриптом на самом сервере
+          # (серверные файлы кладём в /tmp от имени деплой-пользователя,
+          # а уже remote-setup.sh раскладывает их по местам через sudo)
+          scp -i "$KEYDIR/id_deploy" -o IdentitiesOnly=yes -o UserKnownHostsFile="$KEYDIR/known_hosts" \
+            -o StrictHostKeyChecking=accept-new deploy/autoposter.service deploy/nginx-site.conf "$SERVER:/tmp/"
           $SSH "$SERVER" 'bash -s' < deploy/remote-setup.sh
 
       - name: Health check
