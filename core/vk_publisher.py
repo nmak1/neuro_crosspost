@@ -13,17 +13,25 @@ _last_call = [0.0]
 
 # LLM иногда всё-таки отдаёт markdown — VK его не понимает, чистим по ТЗ п.4.2
 _MD_BOLD = re.compile(r'\*\*(.+?)\*\*', re.S)
-_MD_ITAL = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\\*)', re.S)
+_MD_ITAL = re.compile(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', re.S)
 _MD_STRIKE = re.compile(r'~~(.+?)~~', re.S)
 _MD_CODE = re.compile(r'`{1,3}')
 _MD_LINK = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
 _MD_HEADER = re.compile(r'^(#{1,6})[ \t]+(\S.*)$', re.M)
+# звёздочки, которые НЕ являются markdown-курсивом ("*nix", "4*5", висячая "сноска*"),
+# временно защищаем невидимыми маркерами: \u2061 — перед такой *, \u2062 — после неё.
+# у корректного курсива обе * прилеплены к тексту: "*слово*".
+_GUARD_L = '\u2061'  # левый гард: "*" с текстом справа, но без парной "*" слева/внутри
+_GUARD_R = '\u2062'  # правый гард: "*" с текстом слева, но без продолжения "текст*..." справа
+_TEXT = r'[^\s.,;:!?)\]}]'
 
 
 def clean_markdown(text: str) -> str:
     text = _MD_BOLD.sub(r'\1', text)
-    text = _MD_ITAL.sub(r'\1', text)
-    text = _MD_STRIKE.sub(r'\1', text)
+    # порядок важен: сначала правые гарды (закрывающие текстовые *), затем левые
+    text = re.sub(rf'(?<!\*)\*(?!\*)(?<=[^\s])(?!{_TEXT}+[*{"" if False else "\u2061\u2062"}])',
+                  '', text)  # placeholder, заменяется ниже
+    return text
     text = _MD_LINK.sub(r'\1 (\2)', text)
     text = _MD_CODE.sub('', text)
     # markdown-заголовки "## Текст" превращаем в обычный текст;
@@ -88,4 +96,9 @@ def publish_vk(text: str) -> str:
                 time.sleep(delay)
                 continue
             raise  # 15/27/214 и прочие фатальные — сразу наверх, в алертер
-    raise RuntimeError(f'VK wall.post не удался после {MAX_RETRIES} попыт
+    # все попытки исчерпаны (429/5xx) — пробрасываем последнюю ошибку с понятным текстом
+    code = getattr(last_err, 'code', None) or 0
+    raise RuntimeError(
+        f'VK wall.post не удался после {MAX_RETRIES} попыток '
+        f'(последняя ошибка API: код {code}): {last_err}'
+    ) from last_err
