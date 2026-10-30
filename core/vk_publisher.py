@@ -78,10 +78,20 @@ def _post_once(vk, text: str) -> str:
         raise
 
 
+def _make_session():
+    """VkApi-сессия; если в .env задан PROXY=socks5://... — гоним трафик через него
+    (vk_api работает поверх requests: у VkApi есть атрибут http — requests.Session)"""
+    session = vk_api.VkApi(token=config.VK_TOKEN)
+    proxy = getattr(config, 'PROXY', '')
+    if proxy:
+        session.http.proxies = {'http': proxy, 'https': proxy}
+    return session
+
+
 def publish_vk(text: str) -> str:
     """кидаем пост на стену с ретраями (5xx/429), возвращаем post_id вида -235314099_123"""
     text = clean_markdown(text)
-    session = vk_api.VkApi(token=config.VK_TOKEN)
+    session = _make_session()
     vk = session.get_api()
     last_err = None
     for attempt in range(MAX_RETRIES):

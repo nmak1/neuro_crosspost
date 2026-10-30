@@ -1,10 +1,11 @@
 # зависимости бэкенда, python 3.10+
 # ставятся так: python -m venv .venv && .venv\Scripts\pip install -r requirements.txt (windows)
 
-httpx>=0.27,<1.0            # запросы к VK/TG/LLM апи, таймауты из коробки
+httpx[socks]>=0.27,<1.0  # запросы к VK/TG/LLM апи; [socks] — SOCKS5-прокси (PROXY в .env)
 requests>=2.31,<3.0         # vk_api тянет его по зависимости — оставил явно, чтобы не ловить сюрпризы
 vk_api>=11.9,<12.0          # обложка над VK API, работает с group token
 aiogram>=3.4,<4.0           # tg-бот и постинг в канал @nocnnov
+aiohttp-socks>=0.8,<1.0       # SOCKS5-прокси для aiogram (PROXY в .env)
 python-dotenv>=1.0,<2.0     # подхватываем ключи из .env, в коде их нет
 pydantic>=2.5,<3.0          # схемы тем/постов, валидация ответов LLM
 pydantic-settings>=2.2,<3.0 # конфиг через переменные окружения
