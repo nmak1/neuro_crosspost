@@ -1,2 +1,49 @@
+# ========= Python =========
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ========= Переменные окружения и секреты =========
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+deploy/deploy_key
+deploy/deploy_key.pub
+
+# ========= Данные и логи =========
+data/state.json
+data/posts.log
+logs/
+*.log
+
+# ========= Node.js (если есть фронтенд) =========
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ========= IDE и редакторы =========
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========= Сборки =========
+final-bundle/
+*.patch
