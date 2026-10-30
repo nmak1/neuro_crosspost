@@ -31,7 +31,9 @@ async def _post_yandex(prompt: str, system: str) -> str:
         'x-yandex-req-id': '1',
     }
     last_err = None
-    async with httpx.AsyncClient(timeout=60) as client:
+    # PROXY=socks5://user:pass@host:port из .env — гоним запросы к LLM через него (нужен socksio)
+    proxy = getattr(config, 'PROXY', '') or None
+    async with httpx.AsyncClient(timeout=60, proxy=proxy) as client:
         for url in YANDEX_URLS:
             try:
                 r = await client.post(url, json=payload, headers=headers)

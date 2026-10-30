@@ -59,6 +59,8 @@ bash deploy/bootstrap-server.sh root@80.78.248.91
 # 3. вписать реальные ключи на сервере
 ssh root@80.78.248.91
 nano /opt/autoposter/.env          # VK_TOKEN, TG_BOT_TOKEN, YANDEX_API_KEY...
+# при необходимости — SOCKS5-прокси для всех исходящих запросов (VK/TG/LLM):
+# PROXY=socks5://user:pass@host:port  (строку с паролем в git не светить!)
 systemctl restart autoposter
 ```
 

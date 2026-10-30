@@ -2,6 +2,7 @@ import asyncio
 import re  # НОВОЕ: для очистки markdown-обёрток от LLM
 
 from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.types import Message
 
@@ -30,9 +31,18 @@ def _clean_markdown(text: str) -> str:
     return t.replace('~~', '').replace('`', '')
 
 
+def _tg_session():
+    """сессия aiogram через SOCKS5-прокси из .env (PROXY=socks5://user:pass@host:port);
+    без PROXY — обычная прямая сессия"""
+    proxy = getattr(config, 'PROXY', '')
+    if proxy:
+        return AiohttpSession(proxy=proxy)
+    return AiohttpSession()
+
+
 async def _send(text: str, parse_mode: str = 'HTML') -> int:
     text = _clean_markdown(text)  # НОВОЕ: чистим ДО отправки
-    bot = Bot(token=config.TG_BOT_TOKEN)
+    bot = Bot(token=config.TG_BOT_TOKEN, session=_tg_session())
     last_err = None
     try:
         for attempt in range(MAX_RETRIES):

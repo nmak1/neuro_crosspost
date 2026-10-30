@@ -19,6 +19,10 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 POST_TIME_MSK = os.getenv('POST_TIME_MSK', '10:00')
 POST_DAYS = [d.strip().lower() for d in os.getenv('POST_DAYS', 'mon,thu').split(',') if d.strip()]
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+# SOCKS5-прокси для всех исходящих запросов (VK/TG/LLM), если провайдер блокирует API.
+# Формат: socks5://user:pass@host:port — кладём в .env как PROXY=socks5://...
+# Пусто — работаем напрямую. Для httpx нужен пакет socksio (requirements: httpx[socks]).
+PROXY = os.getenv('PROXY', '').strip()
 
 # для совместимости со старым форматом, если кто ещё держит POST_TIMES_UTC в .env
 LEGACY_POST_TIMES_UTC = [t.strip() for t in os.getenv('POST_TIMES_UTC', '').split(',') if t.strip()]
