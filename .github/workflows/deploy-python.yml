@@ -1,7 +1,12 @@
 name: Deploy Neuro Crosspost (Python bot)
 
 # Деплой Python-бота neuro_crosspost на сервер (~/neuro_crosspost, сервис neuro_crosspost).
-# НЕ использует Node.js/npm — это чистый git pull + pip + systemctl restart.
+# НЕ использует Node.js/npm — это чистый git fetch + git reset --hard + pip + systemctl restart.
+# ВАЖНО: используется принудительная синхронизация с origin/main (reset --hard),
+# а НЕ git pull. Локальные правки на сервере раньше ломали деплой:
+#   "error: Your local changes to the following files would be overwritten by merge"
+# Перед сбросом все локальные изменения сохраняются в git stash и в резервную копию .bak,
+# так что их всегда можно вернуть вручную по SSH.
 
 on:
   push:
@@ -65,9 +70,32 @@ jobs:
           SERVER="${SERVER:-nmak1@80.78.248.91}"
           ssh -v -i "$KEYDIR/deploy_key" -o IdentitiesOnly=yes \
             -o UserKnownHostsFile="$KEYDIR/known_hosts" "$SERVER" '
-            cd ~/neuro_crosspost &&
-            git pull origin main &&
-            source venv/bin/activate &&
-            pip install -r requirements.txt &&
-            sudo systemctl restart neuro_crosspost
-          '
+              set -e
+              cd ~/neuro_crosspost
+
+              # 1) Принудительно синхронизируем репозиторий с origin/main.
+              #    git pull здесь падал, если на сервере были локальные правки
+              #    ("local changes would be overwritten by merge") — поэтому
+              #    сначала сохраняем их в stash + резервную копию, затем reset --hard.
+              if ! git diff --quiet || ! git diff --cached --quiet; then
+                echo "На сервере есть незакоммиченные изменения — сохраняем их..." >&2
+                TS=$(date +%Y%m%d_%H%M%S)
+                git stash push --include-untracked -m "auto-stash before deploy $TS" || true
+                tar --exclude=.git --exclude=venv --exclude=data \
+                    -czf "../neuro_crosspost_local_backup_${TS}.tar.gz" . 2>/dev/null || true
+                echo "Резервная копия: ~/neuro_crosspost_local_backup_${TS}.tar.gz" >&2
+              fi
+              git fetch origin main
+              git reset --hard origin/main
+              # убираем лишние неотслеживаемые файлы (кроме venv и data — они нужны)
+              git clean -fd -e venv -e data || true
+
+              # 2) Зависимости
+              source venv/bin/activate
+              pip install -r requirements.txt
+
+              # 3) Перезапуск сервиса
+              sudo systemctl restart neuro_crosspost
+              sleep 2
+              systemctl is-active neuro_crosspost
+            '
